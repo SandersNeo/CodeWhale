@@ -99,9 +99,9 @@ pub fn tool_family_for_name(name: &str) -> ToolFamily {
 
 /// User-facing label for an arbitrary tool name. Known tools collapse to the
 /// semantic verb; unknown tools keep their exact name for debugging.
-#[allow(dead_code)]
+#[cfg(test)]
 #[must_use]
-pub fn tool_display_label_for_name(name: &str) -> String {
+fn tool_display_label_for_name(name: &str) -> String {
     let family = tool_family_for_name(name);
     if matches!(family, ToolFamily::Generic) {
         name.to_string()
@@ -110,48 +110,31 @@ pub fn tool_display_label_for_name(name: &str) -> String {
     }
 }
 
+fn family_message_id(family: ToolFamily) -> crate::localization::MessageId {
+    match family {
+        ToolFamily::Read => crate::localization::MessageId::ToolFamilyRead,
+        ToolFamily::Patch => crate::localization::MessageId::ToolFamilyPatch,
+        ToolFamily::Run => crate::localization::MessageId::ToolFamilyRun,
+        ToolFamily::Find => crate::localization::MessageId::ToolFamilyFind,
+        ToolFamily::Delegate => crate::localization::MessageId::ToolFamilyDelegate,
+        ToolFamily::Fanout => crate::localization::MessageId::ToolFamilyFanout,
+        ToolFamily::Rlm => crate::localization::MessageId::ToolFamilyRlm,
+        ToolFamily::Verify => crate::localization::MessageId::ToolFamilyVerify,
+        ToolFamily::Think => crate::localization::MessageId::ToolFamilyThink,
+        ToolFamily::Generic => crate::localization::MessageId::ToolFamilyGeneric,
+    }
+}
+
 /// Compact activity/status label for arbitrary tool names. Known built-ins use
 /// the semantic verb; unknown tools keep the `tool NAME` form.
 #[must_use]
 pub fn tool_activity_label_for_name(name: &str, locale: Locale) -> String {
     let family = tool_family_for_name(name);
+    let mid = family_message_id(family);
     if matches!(family, ToolFamily::Generic) {
-        format!(
-            "{} {name}",
-            crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyGeneric)
-        )
+        format!("{} {name}", crate::localization::tr(locale, mid))
     } else {
-        let label = match family {
-            ToolFamily::Read => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyRead)
-            }
-            ToolFamily::Patch => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyPatch)
-            }
-            ToolFamily::Run => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyRun)
-            }
-            ToolFamily::Find => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyFind)
-            }
-            ToolFamily::Delegate => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyDelegate)
-            }
-            ToolFamily::Fanout => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyFanout)
-            }
-            ToolFamily::Rlm => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyRlm)
-            }
-            ToolFamily::Verify => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyVerify)
-            }
-            ToolFamily::Think => {
-                crate::localization::tr(locale, crate::localization::MessageId::ToolFamilyThink)
-            }
-            ToolFamily::Generic => unreachable!(),
-        };
-        label.to_string()
+        crate::localization::tr(locale, mid).to_string()
     }
 }
 
