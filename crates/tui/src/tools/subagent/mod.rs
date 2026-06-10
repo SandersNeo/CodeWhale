@@ -5048,16 +5048,39 @@ fn with_default_fork_context(mut input: Value, default: bool) -> Value {
 pub(crate) fn normalize_requested_subagent_model(
     value: &str,
     field: &str,
+    provider: crate::config::ApiProvider,
 ) -> Result<String, ToolError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Err(ToolError::invalid_input(format!("{field} cannot be blank")));
     }
-    crate::config::normalize_model_name(trimmed).ok_or_else(|| {
+    // #3018: Use provider-aware validation so non-DeepSeek providers can
+    // accept their own model IDs instead of failing with "Expected a
+    // DeepSeek model id".
+    crate::config::requested_model_for_provider(provider, trimmed).ok_or_else(|| {
+        let valid_names = crate::config::model_completion_names_for_provider(provider);
+        let valid_hint = if valid_names.is_empty() {
+            String::new()
+        } else {
+            format!(" (accepted: {})", valid_names.join(", "))
+        };
         ToolError::invalid_input(format!(
-            "Invalid {field} '{trimmed}'. Expected a DeepSeek model id such as deepseek-v4-pro or deepseek-v4-flash"
+            "Invalid {field} '{trimmed}' for provider {}{valid_hint}",
+            provider_name_for_error(provider)
         ))
     })
+}
+
+fn provider_name_for_error(provider: crate::config::ApiProvider) -> &'static str {
+    match provider {
+        crate::config::ApiProvider::Deepseek | crate::config::ApiProvider::DeepseekCN => {
+            "DeepSeek"
+        }
+        crate::config::ApiProvider::Openai | crate::config::ApiProvider::OpenaiCodex => "OpenAI",
+        crate::config::ApiProvider::Moonshot => "Moonshot",
+        crate::config::ApiProvider::Ollama => "Ollama",
+        _ => "this provider",
+    }
 }
 
 pub(crate) fn configured_model_for_role_or_type(
@@ -5074,8 +5097,12 @@ pub(crate) fn configured_model_for_role_or_type(
 
     for key in keys {
         if let Some(model) = runtime.role_models.get(&key) {
-            return normalize_requested_subagent_model(model, &format!("subagents.{key}.model"))
-                .map(Some);
+            return normalize_requested_subagent_model(
+                model,
+                &format!("subagents.{key}.model"),
+                runtime.client.api_provider(),
+            )
+            .map(Some);
         }
     }
     Ok(None)
@@ -5264,7 +5291,15 @@ fn message_response_text(blocks: &[ContentBlock]) -> String {
 fn parse_optional_subagent_model(input: &Value, key: &str) -> Result<Option<String>, ToolError> {
     match input.get(key) {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::String(value)) => normalize_requested_subagent_model(value, key).map(Some),
+        Some(Value::String(value)) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Err(ToolError::invalid_input(format!("{key} cannot be blank")));
+            }
+            // #3018: Basic parsing only — provider-aware validation is deferred
+            // to the spawn path where the runtime's ApiProvider is available.
+            Ok(Some(trimmed.to_string()))
+        }
         Some(_) => Err(ToolError::invalid_input(format!("{key} must be a string"))),
     }
 }

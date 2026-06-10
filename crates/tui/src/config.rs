@@ -575,6 +575,19 @@ pub(crate) fn normalize_custom_model_id(model: &str) -> Option<String> {
     }
 }
 
+/// Validate a user-requested model id against the active provider (#3018).
+///
+/// DeepSeek providers use the strict `normalize_model_name` gate (official
+/// API only accepts DeepSeek IDs).  All other providers pass any non-empty,
+/// non-control-character string through — the provider API is the authority.
+#[must_use]
+pub fn requested_model_for_provider(provider: ApiProvider, model: &str) -> Option<String> {
+    match provider {
+        ApiProvider::Deepseek | ApiProvider::DeepseekCN => normalize_model_name(model),
+        _ => normalize_custom_model_id(model),
+    }
+}
+
 fn canonical_official_deepseek_model_id(model: &str) -> Option<&'static str> {
     match model.trim().to_ascii_lowercase().as_str() {
         "deepseek-v4-pro"
