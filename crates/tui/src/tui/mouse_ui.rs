@@ -38,8 +38,11 @@ pub(crate) fn should_drop_loading_mouse_motion(app: &App, mouse: MouseEvent) -> 
             !(over_sidebar || app.sidebar_hover_tooltip.is_some())
         }
         MouseEventKind::Drag(_) => {
+            // Sidebar drag-to-resize must stay live during active turns —
+            // dropping these events wedges the resize state mid-drag (#3063).
             !app.viewport.transcript_selection.dragging
                 && !app.viewport.transcript_scrollbar_dragging
+                && !app.sidebar_resizing
         }
         _ => false,
     }

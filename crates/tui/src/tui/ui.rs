@@ -7654,6 +7654,15 @@ fn render(f: &mut Frame, app: &mut App) {
         // hit-testing can route scroll events correctly.
         app.viewport.last_sidebar_area = sidebar_area;
 
+        // When the sidebar is hidden or doesn't fit, drop its stale mouse
+        // hit areas and any in-flight resize so clicks on those columns
+        // don't keep routing to an invisible handle (#3063).
+        if sidebar_area.is_none() {
+            app.last_sidebar_area = None;
+            app.last_sidebar_handle_area = None;
+            app.sidebar_resizing = false;
+        }
+
         let chat_widget = ChatWidget::new(app, chat_area);
         let buf = f.buffer_mut();
         chat_widget.render(chat_area, buf);

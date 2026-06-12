@@ -727,6 +727,53 @@ fn loading_mouse_filter_keeps_active_drags() {
     app.viewport.transcript_selection.dragging = false;
     app.viewport.transcript_scrollbar_dragging = true;
     assert!(!should_drop_loading_mouse_motion(&app, drag));
+
+    // Sidebar drag-to-resize must also survive the loading filter (#3063).
+    app.viewport.transcript_scrollbar_dragging = false;
+    app.sidebar_resizing = true;
+    assert!(!should_drop_loading_mouse_motion(&app, drag));
+}
+
+#[test]
+fn loading_mouse_filter_allows_sidebar_resize_down_drag_up() {
+    let mut app = create_test_app();
+    app.is_loading = true;
+    setup_resize_handle(&mut app, 80, 33, 120);
+
+    let down = MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: 80,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    };
+    assert!(!should_drop_loading_mouse_motion(&app, down));
+    handle_mouse_event(&mut app, down);
+    assert!(app.sidebar_resizing, "down on handle starts resize");
+
+    let drag = MouseEvent {
+        kind: MouseEventKind::Drag(MouseButton::Left),
+        column: 76,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    };
+    assert!(
+        !should_drop_loading_mouse_motion(&app, drag),
+        "resize drag must not be dropped while loading"
+    );
+    handle_mouse_event(&mut app, drag);
+    let expected = ((37u32 * 100) / 120) as u16;
+    assert_eq!(app.sidebar_width_percent, expected);
+
+    let up = MouseEvent {
+        kind: MouseEventKind::Up(MouseButton::Left),
+        column: 76,
+        row: 5,
+        modifiers: KeyModifiers::NONE,
+    };
+    assert!(!should_drop_loading_mouse_motion(&app, up));
+    handle_mouse_event(&mut app, up);
+    assert!(!app.sidebar_resizing);
+    assert!(app.sidebar_width_dirty);
 }
 
 #[test]
@@ -3624,6 +3671,32 @@ fn sidebar_resize_up_ends_resizing_and_marks_dirty() {
         app.sidebar_width_dirty,
         "should mark width dirty for persistence"
     );
+}
+
+#[test]
+fn sidebar_resize_up_outside_handle_still_ends_resizing() {
+    let mut app = create_test_app();
+    setup_resize_handle(&mut app, 80, 33, 120);
+    app.sidebar_resizing = true;
+    app.sidebar_resize_anchor_x = 80;
+    app.sidebar_resize_anchor_width = 33;
+
+    // Release far away from the handle and the sidebar entirely.
+    handle_mouse_event(
+        &mut app,
+        MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 5,
+            row: 20,
+            modifiers: KeyModifiers::NONE,
+        },
+    );
+
+    assert!(
+        !app.sidebar_resizing,
+        "mouse up must clear resize state even outside the handle"
+    );
+    assert!(app.sidebar_width_dirty);
 }
 
 fn make_subagent(
