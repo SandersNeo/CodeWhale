@@ -38,6 +38,7 @@ pub struct PromptSessionContext<'a> {
     /// When false, the prompt should not spend localization pressure on
     /// `reasoning_content` the user will never see.
     pub show_thinking: bool,
+    pub verbosity: Option<&'a str>,
 }
 
 impl Default for PromptSessionContext<'_> {
@@ -50,6 +51,7 @@ impl Default for PromptSessionContext<'_> {
             translation_enabled: false,
             model_id: "codewhale",
             show_thinking: true,
+            verbosity: None,
         }
     }
 }
@@ -90,6 +92,18 @@ Only output English for:\n\
 This is a hard display requirement: the user does not read English, \
 so any English prose in your response will block their decision-making."
     )
+}
+
+fn concise_output_discipline_instruction() -> &'static str {
+    "\
+## Concise Output Discipline
+
+To minimize token usage and optimize speed:
+- Output only direct, actionable code, technical steps, or final answers.
+- Eliminate all conversational filler, fluff, introductions, transitions, or summarizing conclusions.
+- Do NOT explain what you are about to do or what you have just completed.
+- Do NOT provide conversational status updates before or after running tools.
+- Keep explanations and comments extremely brief and technical, explaining only non-obvious reasoning."
 }
 
 fn translation_target_language_for_tag(locale_tag: &str) -> &'static str {
@@ -1035,6 +1049,7 @@ pub fn system_prompt_for_mode_with_context_and_skills(
             translation_enabled: false,
             model_id: "codewhale",
             show_thinking: true,
+            verbosity: None,
         },
     )
 }
@@ -1114,6 +1129,13 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
         full_prompt = format!(
             "{full_prompt}\n\n{}",
             translation_output_instruction(session_context.locale_tag)
+        );
+    }
+
+    if session_context.verbosity == Some("concise") {
+        full_prompt = format!(
+            "{full_prompt}\n\n{}",
+            concise_output_discipline_instruction()
         );
     }
 
@@ -1909,6 +1931,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1978,6 +2001,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2020,6 +2044,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: false,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2072,6 +2097,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2175,6 +2201,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2211,6 +2238,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2239,6 +2267,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2296,6 +2325,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2324,6 +2354,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2530,6 +2561,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2564,6 +2596,7 @@ mod tests {
                 translation_enabled: false,
                 model_id: "codewhale",
                 show_thinking: true,
+                verbosity: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -3086,6 +3119,36 @@ mod tests {
         assert!(
             prompt.contains(&extra.display().to_string()),
             "instructions block must annotate its source path"
+        );
+    }
+
+    #[test]
+    fn verbosity_concise_appends_discipline_block() {
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path();
+        let prompt = match super::system_prompt_for_mode_with_context_skills_session_and_approval(
+            workspace,
+            None,
+            None,
+            None,
+            PromptSessionContext {
+                user_memory_block: None,
+                goal_objective: None,
+                project_context_pack_enabled: false,
+                locale_tag: "en",
+                translation_enabled: false,
+                model_id: "codewhale",
+                show_thinking: true,
+                verbosity: Some("concise"),
+            },
+        ) {
+            SystemPrompt::Text(text) => text,
+            SystemPrompt::Blocks(_) => panic!("expected text system prompt"),
+        };
+
+        assert!(
+            prompt.contains("## Concise Output Discipline"),
+            "Concise Output Discipline should be appended"
         );
     }
 }

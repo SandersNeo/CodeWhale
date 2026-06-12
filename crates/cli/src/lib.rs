@@ -92,6 +92,12 @@ struct Cli {
     model: Option<String>,
     #[arg(long = "output-mode")]
     output_mode: Option<String>,
+    #[arg(
+        long = "verbosity",
+        value_name = "LEVEL",
+        help = "Controls transcript and output verbosity (normal, concise)"
+    )]
+    verbosity: Option<String>,
     #[arg(long = "log-level")]
     log_level: Option<String>,
     #[arg(long)]
@@ -517,6 +523,7 @@ fn run() -> Result<()> {
         approval_policy: cli.approval_policy.clone(),
         sandbox_mode: cli.sandbox_mode.clone(),
         yolo: Some(cli.yolo),
+        verbosity: cli.verbosity.clone(),
     };
     let command = cli.command.take();
 
@@ -1674,6 +1681,14 @@ fn build_tui_command(
     passthrough: Vec<String>,
 ) -> Result<Command> {
     let tui = locate_sibling_tui_binary()?;
+    let mut verbosity = resolved_runtime.verbosity.clone();
+    if verbosity.is_none()
+        && passthrough
+            .iter()
+            .any(|arg| matches!(arg.as_str(), "exec" | "swebench" | "eval"))
+    {
+        verbosity = Some("concise".to_string());
+    }
 
     let mut cmd = Command::new(&tui);
     if let Some(config) = cli.config.as_ref() {
@@ -1752,6 +1767,9 @@ fn build_tui_command(
     }
     if let Some(output_mode) = cli.output_mode.as_ref() {
         cmd.env("DEEPSEEK_OUTPUT_MODE", output_mode);
+    }
+    if let Some(v) = verbosity.as_ref() {
+        cmd.env("DEEPSEEK_VERBOSITY", v);
     }
     if let Some(log_level) = cli.log_level.as_ref() {
         cmd.env("DEEPSEEK_LOG_LEVEL", log_level);
@@ -3124,6 +3142,7 @@ mod tests {
             approval_policy: None,
             sandbox_mode: None,
             yolo: None,
+            verbosity: None,
             http_headers: std::collections::BTreeMap::new(),
         };
 
@@ -3182,6 +3201,7 @@ mod tests {
             approval_policy: None,
             sandbox_mode: None,
             yolo: None,
+            verbosity: None,
             http_headers: std::collections::BTreeMap::new(),
         };
 
@@ -3221,6 +3241,7 @@ mod tests {
             approval_policy: None,
             sandbox_mode: None,
             yolo: None,
+            verbosity: None,
             http_headers: std::collections::BTreeMap::new(),
         };
 
@@ -3260,6 +3281,7 @@ mod tests {
             approval_policy: None,
             sandbox_mode: None,
             yolo: None,
+            verbosity: None,
             http_headers: resolved_headers,
         };
 
@@ -3316,6 +3338,7 @@ mod tests {
             approval_policy: None,
             sandbox_mode: None,
             yolo: None,
+            verbosity: None,
             http_headers: std::collections::BTreeMap::new(),
         };
 
@@ -3381,6 +3404,7 @@ mod tests {
             approval_policy: None,
             sandbox_mode: None,
             yolo: None,
+            verbosity: None,
             http_headers: std::collections::BTreeMap::new(),
         };
 
@@ -3447,6 +3471,7 @@ mod tests {
             approval_policy: None,
             sandbox_mode: None,
             yolo: None,
+            verbosity: None,
             http_headers: std::collections::BTreeMap::new(),
         };
 
@@ -3543,6 +3568,7 @@ mod tests {
                 approval_policy: None,
                 sandbox_mode: None,
                 yolo: None,
+                verbosity: None,
                 http_headers: std::collections::BTreeMap::new(),
             };
 
