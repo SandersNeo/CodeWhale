@@ -81,6 +81,11 @@ pub enum ContextMenuAction {
     ExecuteCommand {
         command: String,
     },
+    /// Copy a pre-resolved text payload (e.g. a sidebar row's full text)
+    /// to the clipboard.
+    CopyText {
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone)]

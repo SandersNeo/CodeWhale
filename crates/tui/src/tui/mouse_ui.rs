@@ -466,6 +466,35 @@ pub(crate) fn handle_mouse_event(app: &mut App, mouse: MouseEvent) -> Vec<ViewEv
     Vec::new()
 }
 
+/// Resolve a right-click in the sidebar to the hovered row's full copyable
+/// text: the row's untruncated text plus its hover detail when present.
+fn sidebar_row_copy_text(app: &App, mouse: MouseEvent) -> Option<String> {
+    for section in &app.sidebar_hover.sections {
+        if !mouse_hits_rect(mouse, Some(section.content_area)) {
+            continue;
+        }
+        if let Some(row) = section.rows.iter().find(|row| row.row_y == mouse.row) {
+            let mut text = row.full_text.clone();
+            if let Some(detail) = row.detail.as_deref()
+                && !detail.trim().is_empty()
+            {
+                text.push('\n');
+                text.push_str(detail);
+            }
+            return Some(text).filter(|text| !text.trim().is_empty());
+        }
+        let line_idx = (mouse.row.saturating_sub(section.content_area.y)) as usize;
+        if let Some(full) = section.lines.get(line_idx) {
+            return Some(full.clone()).filter(|text| !text.trim().is_empty());
+        }
+    }
+    None
+}
+
+fn first_line(text: &str) -> &str {
+    text.lines().next().unwrap_or(text)
+}
+
 /// Resolve a left-click in the sidebar to a slash command, if the clicked
 /// row has a click_action assigned (#3028).
 fn sidebar_click_action(app: &App, mouse: MouseEvent) -> Option<String> {
@@ -676,6 +705,15 @@ pub(crate) fn build_context_menu_entries(app: &App, mouse: MouseEvent) -> Vec<Co
                 action: ContextMenuAction::ExecuteCommand { command },
             });
         }
+        // Copy the hovered row's full text (sidebar rows can't be
+        // mouse-selected, so the menu is the only copy path).
+        if let Some(text) = sidebar_row_copy_text(app, mouse) {
+            entries.push(ContextMenuEntry {
+                label: "Copy".to_string(),
+                description: truncate_line_to_width(first_line(&text), 28),
+                action: ContextMenuAction::CopyText { text },
+            });
+        }
     } else {
         // Paste first — the most common action when right-clicking in the
         // composer or transcript after copying text from the output area.
@@ -810,6 +848,13 @@ pub(crate) fn handle_context_menu_action(app: &mut App, action: ContextMenuActio
             app.input = command;
             app.status_message = Some("Command staged in composer".to_string());
             app.needs_redraw = true;
+        }
+        ContextMenuAction::CopyText { text } => {
+            if app.clipboard.write_text(&text).is_ok() {
+                app.status_message = Some("Copied".to_string());
+            } else {
+                app.status_message = Some("Copy failed".to_string());
+            }
         }
         ContextMenuAction::OpenCommandPalette => {
             app.view_stack
@@ -1209,6 +1254,37 @@ mod tests {
             None,
             "header row has no action"
         );
+    }
+
+    #[test]
+    fn sidebar_context_menu_offers_copy_of_hovered_row() {
+        let mut app = create_test_app();
+        app.viewport.last_sidebar_area = Some(Rect::new(60, 4, 20, 6));
+        app.sidebar_hover.sections.push(SidebarHoverSection {
+            content_area: Rect::new(60, 4, 20, 6),
+            lines: vec!["agent row".to_string()],
+            rows: vec![SidebarHoverRow {
+                row_y: 4,
+                display_text: "[~] worker doc-che…".to_string(),
+                full_text: "[~] worker doc-checker".to_string(),
+                detail: Some("id: agent_123 · 2 step(s)".to_string()),
+                is_truncated: true,
+                click_action: None,
+            }],
+        });
+
+        let entries = build_context_menu_entries(&app, right_click(65, 4));
+
+        let copy = entries
+            .iter()
+            .find(|entry| matches!(entry.action, ContextMenuAction::CopyText { .. }))
+            .expect("sidebar row should offer Copy");
+        assert_eq!(copy.label, "Copy");
+        assert!(matches!(
+            &copy.action,
+            ContextMenuAction::CopyText { text }
+                if text == "[~] worker doc-checker\nid: agent_123 · 2 step(s)"
+        ));
     }
 
     #[test]
