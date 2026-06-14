@@ -25,7 +25,7 @@ use crate::tui::views::{HelpView, ModalView, ViewAction};
 use crate::working_set::Workspace;
 use crossterm::event::{KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::text::Span;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::Command;
@@ -10125,4 +10125,80 @@ fn agent_progress_redraw_coalesces_once_per_agent_per_drain() {
         ),
         "a later drain can repaint that agent again after the throttle window"
     );
+}
+
+#[test]
+fn six_worker_progress_storm_keeps_input_render_and_cancel_live() {
+    let t0 = Instant::now();
+    let mut last_redraw = None;
+    let mut seen_agents = HashSet::new();
+    let mut redraws = 0usize;
+    let mut received_engine_event = false;
+
+    for burst in 0..80 {
+        for worker in 0..6 {
+            let agent_id = format!("agent-{worker}");
+            let redraw_requested_before_event = received_engine_event;
+            received_engine_event = true;
+            if agent_progress_redraw_permitted_for_drain(
+                &mut last_redraw,
+                &mut seen_agents,
+                &agent_id,
+                t0 + Duration::from_millis(burst * 2 + worker),
+            ) {
+                redraws += 1;
+            } else {
+                received_engine_event = redraw_requested_before_event;
+            }
+        }
+    }
+
+    assert_eq!(
+        seen_agents.len(),
+        6,
+        "storm should observe all six workers in one drain"
+    );
+    assert!(
+        (1..=6).contains(&redraws),
+        "progress storm must request a bounded redraw count, got {redraws}"
+    );
+    assert!(
+        received_engine_event,
+        "at least one bounded redraw should keep rendering live"
+    );
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    tx.send(Ok(Event::Key(KeyEvent::new(
+        KeyCode::Char('c'),
+        KeyModifiers::CONTROL,
+    ))))
+    .expect("send key event");
+    let input = TerminalInputPump {
+        rx,
+        stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        handle: None,
+    };
+    let mut pending_terminal_events = VecDeque::new();
+    let event = next_terminal_event(
+        &input,
+        &mut pending_terminal_events,
+        Duration::from_millis(1),
+    )
+    .expect("terminal event read")
+    .expect("queued key event");
+    assert!(
+        matches!(
+            event,
+            Event::Key(key)
+                if key.code == KeyCode::Char('c')
+                    && key.modifiers.contains(KeyModifiers::CONTROL)
+        ),
+        "input pump channel should deliver input despite progress noise"
+    );
+
+    let mut app = create_test_app();
+    app.is_loading = true;
+    app.runtime_turn_status = Some("in_progress".to_string());
+    assert_eq!(next_escape_action(&app, false), EscapeAction::CancelRequest);
+    assert_eq!(ctrl_c_disposition(&app), CtrlCDisposition::CancelTurn);
 }
