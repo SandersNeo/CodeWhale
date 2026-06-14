@@ -37,6 +37,31 @@ currently bundled into the binary through `rusqlite` so users do not need a
 separate `libsqlite3` runtime package for official release assets. Musl-based
 systems such as Alpine should use [Build from source](#7-build-from-source).
 
+### Linux glibc floor
+
+The official Linux GNU release assets require the glibc version used by the
+release builder. In the current v0.8.61 release lane, native Linux GNU assets
+are built on Ubuntu 24.04 and can require `GLIBC_2.39`. Ubuntu 22.04 ships
+glibc 2.35, so those binaries fail with errors such as:
+
+```text
+version `GLIBC_2.39' not found
+```
+
+The npm wrapper, `codewhale update`, and the Unix archive installer preflight
+Linux binaries before installing them and point older systems to Cargo/source
+builds. If you are on Ubuntu 22.04, Debian stable, RHEL/CentOS, Alpine/musl, or
+another older Linux base, use:
+
+```bash
+cargo install codewhale-cli --locked
+cargo install codewhale-tui --locked
+```
+
+Release engineering follow-up: build Linux GNU assets against an older glibc
+baseline, or add a musl/static Linux asset. This install guide documents the
+floor and preflight behavior; it does not change CI runner selection.
+
 > **Linux ARM64 note (v0.8.7 and earlier).** v0.8.7 and earlier do **not**
 > publish a Linux ARM64 prebuilt; users on HarmonyOS thin-and-light, Asahi
 > Linux, Raspberry Pi, AWS Graviton, etc. saw `Unsupported architecture: arm64`

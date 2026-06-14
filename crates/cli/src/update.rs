@@ -145,6 +145,7 @@ pub fn run_update(beta: bool, check_only: bool, proxy_arg: Option<String>) -> Re
             }
         }
 
+        preflight_downloaded_binary(&asset.name, &bytes)?;
         downloads.push((target.path.clone(), asset.name.clone(), bytes));
     }
 
@@ -542,6 +543,164 @@ fn sha256_hex(data: &[u8]) -> String {
     format!("{hash:x}")
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct GlibcVersion {
+    major: u32,
+    minor: u32,
+    patch: u32,
+}
+
+impl GlibcVersion {
+    fn new(major: u32, minor: u32, patch: u32) -> Self {
+        Self {
+            major,
+            minor,
+            patch,
+        }
+    }
+
+    fn display(self) -> String {
+        if self.patch == 0 {
+            format!("{}.{}", self.major, self.minor)
+        } else {
+            format!("{}.{}.{}", self.major, self.minor, self.patch)
+        }
+    }
+}
+
+fn parse_glibc_version(text: &str) -> Option<GlibcVersion> {
+    text.split(|ch: char| !(ch.is_ascii_digit() || ch == '.'))
+        .filter(|part| part.contains('.'))
+        .find_map(parse_glibc_version_token)
+}
+
+fn parse_glibc_version_token(token: &str) -> Option<GlibcVersion> {
+    let mut parts = token.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
+    Some(GlibcVersion::new(major, minor, patch))
+}
+
+fn highest_required_glibc(bytes: &[u8]) -> Option<GlibcVersion> {
+    const MARKER: &[u8] = b"GLIBC_";
+    let mut offset = 0;
+    let mut highest = None;
+
+    while let Some(found) = find_bytes(&bytes[offset..], MARKER) {
+        let start = offset + found + MARKER.len();
+        let mut end = start;
+        while end < bytes.len() && (bytes[end].is_ascii_digit() || bytes[end] == b'.') {
+            end += 1;
+        }
+        if end > start
+            && let Ok(token) = std::str::from_utf8(&bytes[start..end])
+            && let Some(version) = parse_glibc_version_token(token)
+            && highest.is_none_or(|current| version > current)
+        {
+            highest = Some(version);
+        }
+        offset = start;
+    }
+
+    highest
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return None;
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn glibc_check_disabled() -> bool {
+    [
+        "CODEWHALE_SKIP_GLIBC_CHECK",
+        "DEEPSEEK_TUI_SKIP_GLIBC_CHECK",
+        "DEEPSEEK_SKIP_GLIBC_CHECK",
+    ]
+    .into_iter()
+    .any(|name| std::env::var_os(name).is_some_and(|value| value == std::ffi::OsStr::new("1")))
+}
+
+fn preflight_downloaded_binary(asset_name: &str, bytes: &[u8]) -> Result<()> {
+    if !cfg!(target_os = "linux") || glibc_check_disabled() {
+        return Ok(());
+    }
+
+    let Some(required) = highest_required_glibc(bytes) else {
+        return Ok(());
+    };
+    let host = detect_host_glibc();
+    if host.is_some_and(|host| host >= required) {
+        return Ok(());
+    }
+
+    bail!(
+        "{}",
+        glibc_compatibility_message(asset_name, required, host)
+    );
+}
+
+fn detect_host_glibc() -> Option<GlibcVersion> {
+    let getconf = std::process::Command::new("getconf")
+        .arg("GNU_LIBC_VERSION")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .and_then(|output| parse_glibc_version(&output));
+    if getconf.is_some() {
+        return getconf;
+    }
+
+    std::process::Command::new("ldd")
+        .arg("--version")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            let mut text = String::from_utf8_lossy(&output.stdout).to_string();
+            if text.trim().is_empty() {
+                text = String::from_utf8_lossy(&output.stderr).to_string();
+            }
+            parse_glibc_version(&text)
+        })
+}
+
+fn glibc_compatibility_message(
+    asset_name: &str,
+    required: GlibcVersion,
+    host: Option<GlibcVersion>,
+) -> String {
+    let host_line = match host {
+        Some(host) => format!(
+            "this system has glibc {}, which is too old for that asset.",
+            host.display()
+        ),
+        None => "this system does not appear to provide GNU libc.".to_string(),
+    };
+    format!(
+        "\
+Prebuilt CodeWhale asset `{asset_name}` requires GLIBC_{required}, but {host_line}
+
+Official Linux release binaries are GNU libc builds. Ubuntu 22.04 ships glibc
+2.35, so it cannot run a binary that was built against Ubuntu 24.04/glibc 2.39.
+
+Install from source on this host instead:
+
+  cargo install codewhale-cli --locked
+  cargo install codewhale-tui --locked
+
+Release engineering follow-up: build Linux GNU assets against an older glibc
+baseline, or add a musl/static Linux asset. Set CODEWHALE_SKIP_GLIBC_CHECK=1 to
+bypass this preflight at your own risk.",
+        required = required.display(),
+    )
+}
+
 /// Replace the running binary.
 ///
 /// Writes the new binary to a secure temp file in the target directory, then
@@ -844,6 +1003,44 @@ mod tests {
             hash,
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         );
+    }
+
+    #[test]
+    fn glibc_version_parser_reads_getconf_and_symbol_text() {
+        assert_eq!(
+            parse_glibc_version("glibc 2.35\n"),
+            Some(GlibcVersion::new(2, 35, 0))
+        );
+        assert_eq!(
+            parse_glibc_version("requires GLIBC_2.39"),
+            Some(GlibcVersion::new(2, 39, 0))
+        );
+        assert_eq!(parse_glibc_version("not glibc"), None);
+    }
+
+    #[test]
+    fn highest_required_glibc_finds_highest_binary_symbol() {
+        let bytes = b"\0GLIBC_2.17\0other\0GLIBC_2.39\0GLIBC_2.35";
+
+        assert_eq!(
+            highest_required_glibc(bytes),
+            Some(GlibcVersion::new(2, 39, 0))
+        );
+    }
+
+    #[test]
+    fn glibc_compatibility_message_is_codewhale_branded_and_actionable() {
+        let message = glibc_compatibility_message(
+            "codewhale-linux-x64",
+            GlibcVersion::new(2, 39, 0),
+            Some(GlibcVersion::new(2, 35, 0)),
+        );
+
+        assert!(message.contains("Prebuilt CodeWhale asset `codewhale-linux-x64`"));
+        assert!(message.contains("requires GLIBC_2.39"));
+        assert!(message.contains("this system has glibc 2.35"));
+        assert!(message.contains("cargo install codewhale-cli --locked"));
+        assert!(message.contains("build Linux GNU assets against an older glibc"));
     }
 
     #[test]
