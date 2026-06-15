@@ -121,6 +121,9 @@ const MINIMAX_M2_1_MODEL: &str = "MiniMax-M2.1";
 const MINIMAX_M2_1_HIGHSPEED_MODEL: &str = "MiniMax-M2.1-highspeed";
 const MINIMAX_M2_MODEL: &str = "MiniMax-M2";
 const DEFAULT_MINIMAX_BASE_URL: &str = "https://api.minimax.io/v1";
+const DEFAULT_DEEPINFRA_MODEL: &str = "deepseek-ai/DeepSeek-V4-Pro";
+const DEFAULT_DEEPINFRA_FLASH_MODEL: &str = "deepseek-ai/DeepSeek-V4-Flash";
+const DEFAULT_DEEPINFRA_BASE_URL: &str = "https://api.deepinfra.com/v1/openai";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -191,10 +194,12 @@ pub enum ProviderKind {
     Stepfun,
     #[serde(alias = "mini-max", alias = "mini_max", alias = "minimax")]
     Minimax,
+    #[serde(alias = "deep-infra", alias = "deep_infra")]
+    Deepinfra,
 }
 
 impl ProviderKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::Deepseek,
         Self::NvidiaNim,
         Self::Openai,
@@ -219,6 +224,7 @@ impl ProviderKind {
         Self::Zai,
         Self::Stepfun,
         Self::Minimax,
+        Self::Deepinfra,
     ];
 
     #[must_use]
@@ -370,6 +376,8 @@ pub struct ProvidersToml {
     pub stepfun: ProviderConfigToml,
     #[serde(default, alias = "mini-max", alias = "mini_max", alias = "minimax")]
     pub minimax: ProviderConfigToml,
+    #[serde(default)]
+    pub deepinfra: ProviderConfigToml,
 }
 
 /// Sibling `permissions.toml` schema.
@@ -424,6 +432,7 @@ impl ProvidersToml {
             ProviderKind::Zai => &self.zai,
             ProviderKind::Stepfun => &self.stepfun,
             ProviderKind::Minimax => &self.minimax,
+            ProviderKind::Deepinfra => &self.deepinfra,
         }
     }
 
@@ -453,6 +462,7 @@ impl ProvidersToml {
             ProviderKind::Zai => &mut self.zai,
             ProviderKind::Stepfun => &mut self.stepfun,
             ProviderKind::Minimax => &mut self.minimax,
+            ProviderKind::Deepinfra => &mut self.deepinfra,
         }
     }
 }
@@ -2413,6 +2423,7 @@ impl ConfigToml {
                 ProviderKind::Zai => DEFAULT_ZAI_BASE_URL.to_string(),
                 ProviderKind::Stepfun => DEFAULT_STEPFUN_BASE_URL.to_string(),
                 ProviderKind::Minimax => DEFAULT_MINIMAX_BASE_URL.to_string(),
+                ProviderKind::Deepinfra => DEFAULT_DEEPINFRA_BASE_URL.to_string(),
             })
         };
         // CLI flag wins outright. Otherwise: config-file → injected secrets/env.
@@ -2749,6 +2760,14 @@ fn normalize_model_for_provider(provider: ProviderKind, model: &str) -> String {
             "deepseek-v4-flash" | "deepseek-v4flash" | "deepseek-chat" | "deepseek-reasoner"
             | "deepseek-r1" | "deepseek-v3" | "deepseek-v3.2",
         ) => DEFAULT_TOGETHER_FLASH_MODEL.to_string(),
+        (ProviderKind::Deepinfra, "deepseek-v4-pro" | "deepseek-v4pro") => {
+            DEFAULT_DEEPINFRA_MODEL.to_string()
+        }
+        (
+            ProviderKind::Deepinfra,
+            "deepseek-v4-flash" | "deepseek-v4flash" | "deepseek-chat" | "deepseek-reasoner"
+            | "deepseek-r1" | "deepseek-v3" | "deepseek-v3.2",
+        ) => DEFAULT_DEEPINFRA_FLASH_MODEL.to_string(),
         _ => model.to_string(),
     }
 }
@@ -2951,6 +2970,7 @@ fn default_model_for_provider(provider: ProviderKind) -> &'static str {
         ProviderKind::Zai => DEFAULT_ZAI_MODEL,
         ProviderKind::Stepfun => DEFAULT_STEPFUN_MODEL,
         ProviderKind::Minimax => DEFAULT_MINIMAX_MODEL,
+        ProviderKind::Deepinfra => DEFAULT_DEEPINFRA_MODEL,
     }
 }
 
@@ -2980,6 +3000,7 @@ fn default_base_url_for_provider(provider: ProviderKind) -> &'static str {
         ProviderKind::Zai => DEFAULT_ZAI_BASE_URL,
         ProviderKind::Stepfun => DEFAULT_STEPFUN_BASE_URL,
         ProviderKind::Minimax => DEFAULT_MINIMAX_BASE_URL,
+        ProviderKind::Deepinfra => DEFAULT_DEEPINFRA_BASE_URL,
     }
 }
 
@@ -3962,6 +3983,8 @@ struct EnvRuntimeOverrides {
     stepfun_model: Option<String>,
     minimax_base_url: Option<String>,
     minimax_model: Option<String>,
+    deepinfra_base_url: Option<String>,
+    deepinfra_model: Option<String>,
 }
 
 impl EnvRuntimeOverrides {
@@ -4155,6 +4178,12 @@ impl EnvRuntimeOverrides {
             minimax_model: std::env::var("MINIMAX_MODEL")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
+            deepinfra_base_url: std::env::var("DEEPINFRA_BASE_URL")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
+            deepinfra_model: std::env::var("DEEPINFRA_MODEL")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
         }
     }
 
@@ -4201,6 +4230,7 @@ impl EnvRuntimeOverrides {
             ProviderKind::Zai => self.zai_base_url.clone(),
             ProviderKind::Stepfun => self.stepfun_base_url.clone(),
             ProviderKind::Minimax => self.minimax_base_url.clone(),
+            ProviderKind::Deepinfra => self.deepinfra_base_url.clone(),
         }
     }
 
@@ -4224,6 +4254,7 @@ impl EnvRuntimeOverrides {
             ProviderKind::Zai => self.zai_model.clone(),
             ProviderKind::Stepfun => self.stepfun_model.clone(),
             ProviderKind::Minimax => self.minimax_model.clone(),
+            ProviderKind::Deepinfra => self.deepinfra_model.clone(),
             _ => None,
         }?;
 
