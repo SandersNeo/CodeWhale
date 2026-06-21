@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use base64::{Engine as _, engine::general_purpose};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -606,7 +606,7 @@ impl DeepSeekClient {
         }
         if insecure_skip_tls_verify {
             logging::warn(format!(
-                "TLS certificate verification is disabled for provider {}; prefer SSL_CERT_FILE with a trusted custom CA bundle when possible",
+                "TLS certificate verification cannot be disabled for provider {}; use SSL_CERT_FILE with a trusted custom CA bundle instead",
                 api_provider.as_str()
             ));
         }
@@ -644,6 +644,13 @@ impl DeepSeekClient {
         base_url: &str,
         insecure_skip_tls_verify: bool,
     ) -> Result<reqwest::Client> {
+        if insecure_skip_tls_verify {
+            bail!(
+                "TLS certificate verification cannot be disabled for provider {}; configure SSL_CERT_FILE with a trusted custom CA bundle instead",
+                api_provider.as_str()
+            );
+        }
+
         let headers = build_default_headers(api_key, extra_headers, api_provider, base_url)?;
         // The ChatGPT Codex backend sits behind Cloudflare bot protection that
         // only admits the Codex CLI's user agent; present a codex_cli_rs UA on
@@ -677,9 +684,6 @@ impl DeepSeekClient {
             && !cert_path.is_empty()
         {
             builder = add_extra_root_certs(builder, &cert_path);
-        }
-        if insecure_skip_tls_verify {
-            builder = builder.danger_accept_invalid_certs(true);
         }
         builder.build().map_err(Into::into)
     }
@@ -1862,7 +1866,7 @@ mod tests {
     }
 
     #[test]
-    fn build_http_client_accepts_provider_scoped_tls_skip_verify() {
+    fn build_http_client_rejects_provider_scoped_tls_skip_verify() {
         let client = DeepSeekClient::build_http_client(
             "sk-test",
             &HashMap::new(),
@@ -1871,7 +1875,10 @@ mod tests {
             true,
         );
 
-        assert!(client.is_ok());
+        let err = client.expect_err("tls skip verify should be rejected");
+        let message = err.to_string();
+        assert!(message.contains("cannot be disabled"));
+        assert!(message.contains("SSL_CERT_FILE"));
     }
 
     #[test]

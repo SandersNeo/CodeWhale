@@ -411,14 +411,20 @@ fn resolve_auth_token(options: &AppServerOptions) -> Result<Option<String>> {
     let token = configured
         .map(str::to_string)
         .unwrap_or_else(|| format!("cwapp_{}", Uuid::new_v4().simple()));
-    if has_explicit_token {
-        eprintln!("app-server auth: bearer token required for HTTP routes.");
-    } else {
-        eprintln!("app-server auth: generated bearer token for this process.");
-        eprintln!("  Authorization: Bearer {token}");
-        eprintln!("  Pass --auth-token or set CODEWHALE_APP_SERVER_TOKEN for a stable token.");
+    for line in app_server_auth_status_lines(has_explicit_token) {
+        eprintln!("{line}");
     }
     Ok(Some(token))
+}
+
+fn app_server_auth_status_lines(has_explicit_token: bool) -> Vec<&'static str> {
+    if has_explicit_token {
+        return vec!["app-server auth: bearer token required for HTTP routes."];
+    }
+    vec![
+        "app-server auth: generated bearer token for this process (not printed).",
+        "  Pass --auth-token or set CODEWHALE_APP_SERVER_TOKEN when another client needs to connect.",
+    ]
 }
 
 fn cors_layer(extra_origins: &[String]) -> CorsLayer {
@@ -1403,6 +1409,15 @@ mod tests {
         let token = resolve_auth_token(&options).unwrap();
         assert!(token.is_some());
         assert!(token.unwrap().starts_with("cwapp_"));
+    }
+
+    #[test]
+    fn generated_auth_status_does_not_render_token() {
+        let rendered = app_server_auth_status_lines(false).join("\n");
+
+        assert!(!rendered.contains("Authorization: Bearer"));
+        assert!(rendered.contains("not printed"));
+        assert!(rendered.contains("CODEWHALE_APP_SERVER_TOKEN"));
     }
 
     #[test]

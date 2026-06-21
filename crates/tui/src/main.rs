@@ -3637,11 +3637,13 @@ fn doctor_tls_status(config: &Config) -> DoctorTlsStatus {
     let provider = config.api_provider().as_str();
     let insecure_skip_tls_verify = config.insecure_skip_tls_verify();
     DoctorTlsStatus {
-        certificate_verification: !insecure_skip_tls_verify,
+        certificate_verification: true,
         insecure_skip_tls_verify,
         provider,
         message: if insecure_skip_tls_verify {
-            format!("TLS certificate verification disabled for provider {provider}")
+            format!(
+                "TLS certificate verification cannot be disabled for provider {provider}; use SSL_CERT_FILE with a trusted custom CA bundle"
+            )
         } else {
             "TLS certificate verification enabled".to_string()
         },
@@ -6597,10 +6599,11 @@ mod doctor_endpoint_tests {
 
         let status = doctor_tls_status(&config);
 
-        assert!(!status.certificate_verification);
+        assert!(status.certificate_verification);
         assert!(status.insecure_skip_tls_verify);
         assert_eq!(status.provider, "openai");
-        assert!(status.message.contains("disabled"));
+        assert!(status.message.contains("cannot be disabled"));
+        assert!(status.message.contains("SSL_CERT_FILE"));
     }
 
     #[test]
