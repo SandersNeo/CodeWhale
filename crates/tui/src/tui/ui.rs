@@ -6808,9 +6808,9 @@ async fn switch_provider(
         target.as_str(),
     );
     switch_summary.push(char::from(10));
-    switch_summary.push_str(&format!("Model: {} → {}", previous_model, new_model));
+    switch_summary.push_str(&format!("Model: {previous_model} → {new_model}"));
     switch_summary.push(char::from(10));
-    switch_summary.push_str(&format!("Endpoint: {}", new_endpoint));
+    switch_summary.push_str(&format!("Endpoint: {new_endpoint}"));
     if let Some(ref warning) = persist_warning {
         switch_summary.push(char::from(10));
         switch_summary.push_str(warning);
