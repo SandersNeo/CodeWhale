@@ -24,6 +24,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: auto-tag-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   tag:
     runs-on: ubuntu-latest
@@ -41,6 +45,10 @@ jobs:
           v="$(grep -E '^version = "' Cargo.toml | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
           if [ -z "$v" ]; then
             echo "::error::Could not parse workspace version from Cargo.toml" >&2
+            exit 1
+          fi
+          if ! echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Workspace version '$v' is not valid semver (expected X.Y.Z)" >&2
             exit 1
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
@@ -64,7 +72,11 @@ jobs:
 
       - name: Verify version consistency
         if: steps.check.outputs.exists == 'false'
-        run: ./scripts/release/check-versions.sh
+        run: |
+          ./scripts/release/check-versions.sh || {
+            echo "::error::Version consistency check failed. Aborting tag creation." >&2
+            exit 1
+          }
 
       - name: Create and push tag
         id: create
@@ -82,16 +94,28 @@ jobs:
             exit 0
           fi
           git tag "${TAG}"
-          if ! git push origin "${TAG}"; then
+          max_retries=3
+          retry_count=0
+          while [ "${retry_count}" -lt "${max_retries}" ]; do
+            if git push origin "${TAG}"; then
+              echo "pushed=true" >> "$GITHUB_OUTPUT"
+              echo "Pushed ${TAG}. release.yml should now run (requires RELEASE_TAG_PAT for trigger)."
+              exit 0
+            fi
             if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
               echo "pushed=false" >> "$GITHUB_OUTPUT"
               echo "Tag ${TAG} appeared during push; treating as already handled."
               exit 0
             fi
-            exit 1
-          fi
-          echo "pushed=true" >> "$GITHUB_OUTPUT"
-          echo "Pushed ${TAG}. release.yml should now run (requires RELEASE_TAG_PAT for trigger)."
+            retry_count=$((retry_count + 1))
+            if [ "${retry_count}" -lt "${max_retries}" ]; then
+              echo "Push attempt ${retry_count} failed; retrying in 10s..."
+              sleep 10
+            fi
+          done
+
+          echo "::error::Failed to push tag ${TAG} after ${max_retries} attempts." >&2
+          exit 1
 
       - name: Warn if PAT missing
         if: steps.create.outputs.pushed == 'true'
