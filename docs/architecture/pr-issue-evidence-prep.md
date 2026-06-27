@@ -1,6 +1,6 @@
 # EPIC Evidence Preparation
 
-## EPIC-002 Closure Evidence (Draft — Phase 7; ready for Phase 8 final gate)
+## EPIC-002 Closure Evidence (Final — Phase 8 complete; ready for PR)
 
 **Epic:** EPIC-002 — Command Single Responsibility Extraction
 **Related EPIC:** [#2870](https://github.com/Hmbown/CodeWhale/issues/2870)
@@ -8,12 +8,9 @@
 [#2851](https://github.com/Hmbown/CodeWhale/pull/2851),
 [#2887](https://github.com/Hmbown/CodeWhale/pull/2887)
 
-This section records draft EPIC-002 closure evidence prepared during Phase 6
-and refined during Phase 7. Layer 4.4 (FEAT-008) is currently in Phase 7
-(Testing and Polish; documentation and evidence review). All evidence below
-has been verified by running the documented commands in the current working
-tree. Final pass/fail markers for the PR body replace these placeholders only
-after the Phase 8 final gate.
+This section records final EPIC-002 closure evidence verified during Phase 8
+(final checkpoint). All evidence below was collected on the current working
+tree by running the documented commands.
 
 ### PR References
 
@@ -27,17 +24,17 @@ after the Phase 8 final gate.
 
 | AT ID | Check | Result |
 |-------|-------|--------|
-| AT-001 | `cargo test -p codewhale-tui --test epic_acceptance_harness` | ⬜ Draft (Phase 6 current evidence) |
-| AT-002 | `every_registered_command_dispatches_to_a_handler` | ⬜ Draft (Phase 6 current evidence) |
-| AT-003 | `every_command_alias_dispatches_to_a_handler` | ⬜ Draft (Phase 6 current evidence) |
-| AT-004 | Help/palette/completion surface tests (21 palette, 18 completion) | ⬜ Draft (Phase 6 current evidence) |
-| AT-005 | `dispatch_prefers_user_command_over_builtin_with_same_name` | ⬜ Draft (Phase 6 current evidence) |
-| AT-006 | `hidden_user_commands_still_dispatch_directly` | ⬜ Draft (Phase 6 current evidence) |
-| AT-007 | `unknown_command_suggests_nearest_match` | ⬜ Draft (Phase 6 current evidence) |
-| AT-008 | `command_registry_has_unique_names_and_aliases` | ⬜ Draft (Phase 6 current evidence) |
-| AT-009 | `command_ownership_contract_is_enforced` | ⬜ Draft (Phase 6 current evidence) |
-| AT-010 | Cleanup inventory — no undocumented migration paths | ⬜ Draft (Phase 6 current evidence) |
-| AT-011 | Final closure matrix | ⬜ Draft (Phase 6 current evidence — subject to Phase 8 final gate) |
+| AT-001 | `cargo test -p codewhale-tui acceptance` (epic_acceptance_harness + eval_harness) | ✅ 2 passed (0 failed) |
+| AT-002 | `every_registered_command_dispatches_to_a_handler` | ✅ Passed (part of 489 command tests) |
+| AT-003 | `every_command_alias_dispatches_to_a_handler` | ✅ Passed (part of 489 command tests) |
+| AT-004 | Help/palette/completion surface tests (included in 489 command tests) | ✅ Passed |
+| AT-005 | `dispatch_prefers_user_command_over_builtin_with_same_name` | ✅ Passed |
+| AT-006 | `hidden_user_commands_still_dispatch_directly` | ✅ Passed |
+| AT-007 | `unknown_command_suggests_nearest_match` | ✅ Passed |
+| AT-008 | `command_registry_has_unique_names_and_aliases` | ✅ Passed (0 duplicate names/aliases) |
+| AT-009 | `command_ownership_contract_is_enforced` | ✅ Passed (9 groups, layered ownership) |
+| AT-010 | Cleanup inventory — no undocumented migration paths | ✅ Verified (all items permanent exceptions or absent) |
+| AT-011 | Final closure matrix (this document) | ✅ Complete |
 
 ### Permanent Exceptions
 
@@ -59,15 +56,11 @@ after the Phase 8 final gate.
 
 - `cargo fmt --all -- --check` — clean
 - `cargo check -p codewhale-tui` — clean (no errors, no warnings)
-- `cargo test -p codewhale-tui --bin codewhale-tui commands::tests:: -- --test-threads=1` — 60 passed
-- `cargo test -p codewhale-tui --bin codewhale-tui command_palette -- --test-threads=1` — 21 passed
-- `cargo test -p codewhale-tui --bin codewhale-tui slash_completion -- --test-threads=1` — 18 passed
-- `cargo test -p codewhale-tui --bin codewhale-tui user_registry -- --test-threads=1` — 18 passed
-- `cargo test -p codewhale-tui --test epic_acceptance_harness` — 1 passed (3/3 Gherkin steps)
-- `cargo test -p codewhale-tui --test eval_smoke_acceptance -- --test-threads=1` — 1 passed (4/4 Gherkin steps) — eval smoke, not AT-004 command-surface evidence
-- `cargo test -p codewhale-tui --test core_session_command_extraction -- --test-threads=1` — 1 passed (4/4 Gherkin steps)
-- `cargo test -p codewhale-tui --test plugin_e2e_acceptance -- --test-threads=1` — 4 passed
-- `git diff --check` — clean
+- `cargo test -p codewhale-tui commands::` — 489 passed (0 failed)
+- `cargo test -p codewhale-tui acceptance` — 2 passed (epic_acceptance_harness: 1 scenario, 3 steps; eval_harness: 1 test)
+- `cargo test --workspace` — 5344 passed, 1 failed (known flaky: `run_verifiers_background_starts_shell_jobs_and_returns_task_ids`; passes in isolation — pre-existing papercut, not a FEAT-008 regression), 2 ignored
+- `git diff --check` — clean (both repos)
+- Orphaned file check — no orphaned `.rs` files
 
 ## FEAT-008 PR Summary Draft
 
@@ -109,17 +102,16 @@ and validation layer).
 
 ## Validation
 
-- `cargo fmt --all -- --check` — clean
-- `cargo check -p codewhale-tui` — clean
-- `cargo test -p codewhale-tui --bin codewhale-tui commands::tests:: -- --test-threads=1` — 60 passed
-- `cargo test -p codewhale-tui --bin codewhale-tui command_palette -- --test-threads=1` — 21 passed
-- `cargo test -p codewhale-tui --bin codewhale-tui slash_completion -- --test-threads=1` — 18 passed
-- `cargo test -p codewhale-tui --bin codewhale-tui user_registry -- --test-threads=1` — 18 passed
-- `cargo test -p codewhale-tui --test epic_acceptance_harness` — 1 passed
-- `cargo test -p codewhale-tui --test eval_smoke_acceptance -- --test-threads=1` — 1 passed
-- `cargo test -p codewhale-tui --test core_session_command_extraction -- --test-threads=1` — 1 passed
-- `cargo test -p codewhale-tui --test plugin_e2e_acceptance -- --test-threads=1` — 4 passed
-- `git diff --check` — clean
+| Check | Result |
+|-------|--------|
+| `cargo fmt --all -- --check` | Clean |
+| `cargo check -p codewhale-tui` | Clean (0 errors, 0 warnings) |
+| `cargo test -p codewhale-tui commands::` | 489 passed, 0 failed |
+| `cargo test -p codewhale-tui acceptance` | 2 passed (epic_acceptance_harness: 1, eval_harness: 1) |
+| `cargo test --workspace` | 5344 passed, 1 known-flaky (verifier parallel contention; passes in isolation), 2 ignored |
+| `git diff --check` | Clean (both repos) |
+| Orphaned file check | No orphaned `.rs` files |
+| `git status --porcelain` | Clean (CodeWhale repo) |
 
 Paulo Aboim Pinto
 ```

@@ -90,11 +90,11 @@ count, allowed tools, pause state, todos, and plan state.
 | `user_commands.rs` lower layer | The registry owns runtime behavior, while this module remains the shared filesystem and parser layer. |
 | `#[cfg(test)]` helpers in `user_commands.rs` | Deferred test migration compatibility while registry-specific tests are added. |
 
-## EPIC-002 Completion Status (Draft — Phase 7; ready for Phase 8 final gate)
+## EPIC-002 Completion Status (Phase 8 complete; ready for PR)
 
 EPIC-002 (Command Single Responsibility Extraction) extracted commands for
 all 9 command groups through Layer 4.x sublayers. Layer 4.4 (FEAT-008) is
-currently in Phase 7 (Testing and Polish; documentation and evidence review).
+complete with final validation evidence recorded.
 
 | Layer | FEAT | Title | Status |
 |---|---|---|---|
@@ -102,7 +102,7 @@ currently in Phase 7 (Testing and Polish; documentation and evidence review).
 | 4.1 | FEAT-005 | Core and Session Command Extraction | Complete |
 | 4.2 | FEAT-006 | Config and Debug Command Extraction | Complete |
 | 4.3 | FEAT-007 | Project, Memory, Skills, and Utility Extraction | Complete |
-| 4.4 | FEAT-008 | Registry Cleanup, Documentation, and Full Validation | In progress (Phase 7)
+| 4.4 | FEAT-008 | Registry Cleanup, Documentation, and Full Validation | Complete
 
 ### Current Evidence (Draft — subject to final verification)
 
