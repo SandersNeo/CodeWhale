@@ -10,31 +10,17 @@ pub struct PluginsCommands;
 
 impl CommandGroup for PluginsCommands {
     fn commands(&self) -> Vec<Box<dyn Command>> {
-        vec![
-            Box::new(FunctionCommand::new(
-                PluginListCmd::info(),
-                PluginListCmd::execute,
-            )),
-            Box::new(FunctionCommand::new(
-                PluginEnableCmd::info(),
-                PluginEnableCmd::execute,
-            )),
-            Box::new(FunctionCommand::new(
-                PluginDisableCmd::info(),
-                PluginDisableCmd::execute,
-            )),
-            Box::new(FunctionCommand::new(
-                PluginInfoCmd::info(),
-                PluginInfoCmd::execute,
-            )),
-        ]
+        vec![Box::new(FunctionCommand::new(
+            PluginListCmd::info(),
+            PluginListCmd::execute,
+        ))]
     }
 }
 
 pub(in crate::commands) const PLUGIN_LIST_INFO: CommandInfo = CommandInfo {
     name: "plugin",
     aliases: &["plugins"],
-    usage: "/plugin list",
+    usage: "/plugin [list|enable <name>|disable <name>|info <name>]",
     description_id: MessageId::CmdPluginDescription,
 };
 
@@ -46,92 +32,37 @@ impl RegisterCommand for PluginListCmd {
     }
 
     fn execute(app: &mut App, arg: Option<&str>) -> CommandResult {
-        if let Some(arg) = arg {
-            if arg.starts_with("list") {
-                plugin_list(app)
-            } else if arg.starts_with("enable ") {
-                let name = arg.strip_prefix("enable ").unwrap_or("").trim();
-                plugin_enable(app, name)
-            } else if arg.starts_with("disable ") {
-                let name = arg.strip_prefix("disable ").unwrap_or("").trim();
-                plugin_disable(app, name)
-            } else {
-                plugin_info(app, arg.trim())
+        let Some(arg) = arg.map(str::trim).filter(|arg| !arg.is_empty()) else {
+            return plugin_list(app);
+        };
+
+        let mut parts = arg.splitn(2, char::is_whitespace);
+        let action = parts.next().unwrap_or_default();
+        let rest = parts.next().unwrap_or_default().trim();
+        match action {
+            "list" | "ls" => plugin_list(app),
+            "enable" => {
+                if rest.is_empty() {
+                    CommandResult::error("Usage: /plugin enable <name>")
+                } else {
+                    plugin_enable(app, rest)
+                }
             }
-        } else {
-            plugin_list(app)
-        }
-    }
-}
-
-pub(in crate::commands) const PLUGIN_ENABLE_INFO: CommandInfo = CommandInfo {
-    name: "plugin enable",
-    aliases: &[],
-    usage: "/plugin enable <name>",
-    description_id: MessageId::CmdPluginDescription,
-};
-
-pub(in crate::commands) struct PluginEnableCmd;
-
-impl RegisterCommand for PluginEnableCmd {
-    fn info() -> &'static CommandInfo {
-        &PLUGIN_ENABLE_INFO
-    }
-
-    fn execute(app: &mut App, arg: Option<&str>) -> CommandResult {
-        let name = arg.unwrap_or("").trim();
-        if name.is_empty() {
-            CommandResult::error("Usage: /plugin enable <name>")
-        } else {
-            plugin_enable(app, name)
-        }
-    }
-}
-
-pub(in crate::commands) const PLUGIN_DISABLE_INFO: CommandInfo = CommandInfo {
-    name: "plugin disable",
-    aliases: &[],
-    usage: "/plugin disable <name>",
-    description_id: MessageId::CmdPluginDescription,
-};
-
-pub(in crate::commands) struct PluginDisableCmd;
-
-impl RegisterCommand for PluginDisableCmd {
-    fn info() -> &'static CommandInfo {
-        &PLUGIN_DISABLE_INFO
-    }
-
-    fn execute(app: &mut App, arg: Option<&str>) -> CommandResult {
-        let name = arg.unwrap_or("").trim();
-        if name.is_empty() {
-            CommandResult::error("Usage: /plugin disable <name>")
-        } else {
-            plugin_disable(app, name)
-        }
-    }
-}
-
-pub(in crate::commands) const PLUGIN_INFO_INFO: CommandInfo = CommandInfo {
-    name: "plugin info",
-    aliases: &[],
-    usage: "/plugin info <name>",
-    description_id: MessageId::CmdPluginDescription,
-};
-
-pub(in crate::commands) struct PluginInfoCmd;
-
-impl RegisterCommand for PluginInfoCmd {
-    fn info() -> &'static CommandInfo {
-        &PLUGIN_INFO_INFO
-    }
-
-    fn execute(app: &mut App, arg: Option<&str>) -> CommandResult {
-        let name = arg.unwrap_or("").trim();
-        if name.is_empty() {
-            CommandResult::error("Usage: /plugin info <name>")
-        } else {
-            plugin_info(app, name)
+            "disable" => {
+                if rest.is_empty() {
+                    CommandResult::error("Usage: /plugin disable <name>")
+                } else {
+                    plugin_disable(app, rest)
+                }
+            }
+            "info" => {
+                if rest.is_empty() {
+                    CommandResult::error("Usage: /plugin info <name>")
+                } else {
+                    plugin_info(app, rest)
+                }
+            }
+            name => plugin_info(app, name),
         }
     }
 }
